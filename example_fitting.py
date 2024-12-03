@@ -1,126 +1,87 @@
-import matplotlib.pyplot as plt
-import numpy as np
-
 # import libraries
-from libraries.params_fitting import Fit_params_stp
+from utils import *
+from libraries.params_fitting import Fit_params_SD
 from synaptic_dynamic_models.MSSM import MSSM_model
 from synaptic_dynamic_models.TM import TM_model
-from utils import *
+from synaptic_dynamic_models.SynDynModel import SynDynModel
 
 # **********************************************************************************************************************
-# GLOBAL PARAMETERS
-model_str = "TM"  # String defining the model to use (e.g. MSSM, TM)
-num_syn = 1       # Number of synapses to simulate
-ind = 0           # Auxiliar index to define the Synaptic Dynamics mechanism (0: depression, 1: facilitation)
-
-# VARIABLES TO PROCESS
-prefix = prefix_v[ind]
-ext_params = False
-exp_ind_save = 0
-
 # PATHS TO STORE/LOAD DATA
 path_reference_data = "reference_data/"
 path_store_models = "outputs/fitting_test/"
 
+# **********************************************************************************************************************
+# GLOBAL PARAMETERS
+model_str = "MSSM"  # String defining the model to use (e.g. MSSM, TM)
+
+# AUXILIAR VARIABLES FOR THE EXAMPLE
+ind = 0                 # Auxiliar index to define the Synaptic Dynamics mechanism (0: depression, 1: facilitation)
+ind_experiment = 1      # Index of experiment to run/load
+prefix = prefix_v[ind]  # string defining a description of the SD model: "depression" or "facilitation"
+
+# ARGUMENTS FOR THE SIMULATION SETUP: list following this order [sfreq, max_t, input_factor, output_factor, description]
+# sfreq (int) sampling frequency
+# max_t (float) simulation time [in seconds]
+# input_factor (float) scaling factor of input signal
+# output_factor (float) scaling factor of reference signal
+# description (String) sufix for the name of the file, that is stored once the fitting process finishes.
+sim_args = [sfreq_ext[ind], max_t_ext[ind], input_factor_ext[ind], output_factor_ext[ind], str(ind)]
+
 # ******************************************************************************************************************
 # DICTIONARY OF PARAMETERS
 example_fitting = Example_fitting(model_str, path_signals=path_reference_data, path_outputs=path_store_models)
-example_fitting.initial_params(ind, description=str(ind))  # TRANSFORM INTO *ARGS FUNCTION WITH r,sfreq,max_t,end_t,input_factor,output_factor
+example_fitting.initial_params(ind, sim_args)
+example_fitting.params_DE()
 dict_params = example_fitting.dict_params
 sim_params = example_fitting.sim_params
+DE_params = example_fitting.DE_params
 
 # ******************************************************************************************************************
-# Loading reference signals
+# LOADING INPUT AND REFERENCE SIGNALS
 input_signal = loadObject(prefix + "_input_lf", path_reference_data)
 reference_signal = loadObject(prefix + "_epsc_lf", path_reference_data)
+
+# **********************************************************************************************************************
+# SYNAPTIC DYNAMICS MODEL
+model_SD = None
+if model_str == "MSSM":
+    model_SD = MSSM_model()
+if model_str == "TM":
+    model_SD = TM_model()
+# Setting simulation parameters
+model_SD.set_simulation_params(sim_params)
 
 # **********************************************************************************************************************
 # FITTING PROCESS
 # Time measurements
 ini_loop_time = m_time()
-if ext_params:
-    # ******************************************************************************************************************
-    # Creating model with external parameters
-    model_stp = None
-    """
-    if model_str == "MSSM":
-        model_stp = MSSM_model(n_syn=num_syn)
-    if model_str == "LAP":
-        model_stp = LAP_model(n_syn=num_syn)
-    if model_str == "TM":
-        model_stp = TM_model(n_syn=num_syn)
+print("Evaluating curve fitting for", prefix, ", index ", str(ind_experiment))
 
-    model_stp.set_simulation_params(sim_params)
+# Initialization
+pf = Fit_params_SD(input_signal, reference_signal, model_SD, dict_params, DE_params)
 
-    if stochastic_analysis:
-        for i in range(num_trials_stochastic):
-            seed = int(su([1, 10e4]))
-            print("freq analaysis No. ", i, "seed ", seed)
-            Input = poisson_generator(dt, time_vector, rate=r, n=1, myseed=seed)[0, :]
+# In case of running multiple experiments, update the key 'ind_experiment' of dict_params and call set_dict_params()
+dict_params['ind_experiment'] = ind_experiment
+pf.set_dict_params(dict_params)
 
-            kwargs_model = {'model': model_stp, 'Input': Input, 'params_name': ext_pa_name,
-                            'mode': dict_params['ODE_mode'], 'only spikes': dict_params['only_spikes']}
-            # Evaluating the model
-            if model_str == "MSSM":
-                model_mssm(time_vector, *ext_pa, **kwargs_model)
-            if model_str == "LAP":
-                model_lap(time_vector, *ext_pa, **kwargs_model)
-            if model_str == "TM":
-                model_tm(time_vector, *ext_pa, **kwargs_model)
+# Fitting parameters
+tuned_parameters = pf.run_fit()
 
-            trials_spike = trials_spike + model_stp.output_spike_events
-            trials_time_spike = trials_time_spike + model_stp.time_spike_events
-            trials_first_spike.append(model_stp.output_spike_events[0])
-        trials_spike = np.array(trials_spike)
-        trials_time_spike = np.array(trials_time_spike)
-        trials_first_spike = np.array(trials_first_spike)
-    else:
-        # Deterministic input, executing only once
-        kwargs_model = {'model': model_stp, 'Input': Input, 'params_name': ext_pa_name,
-                        'mode': dict_params['ODE_mode'], 'only spikes': dict_params['only_spikes']}
-        # Evaluating the model
-        if model_str == "MSSM":
-            model_mssm(time_vector, *ext_pa, **kwargs_model)
-        if model_str == "LAP":
-            model_lap(time_vector, *ext_pa, **kwargs_model)
-        if model_str == "TM":
-            model_tm(time_vector, *ext_pa, **kwargs_model)
+# Evaluating Model
+output_model = pf.evaluate_model()
 
-    # print(rmse(model_stp.get_output(), -epsc_ref))
-    # Time measurements
-    end_one_loop_time = m_time()
-    print_time(end_one_loop_time - ini_loop_time, "Loading external/manual params")
-    # """
-else:
-    # ******************************************************************************************************************
-    # Fitting parameters
-    pf = Fit_params_stp(sim_params, dict_params)
-    pf.set_input(input_signal)
+# **********************************************************************************************************************
+# Time measurements
+end_one_loop_time = m_time()
+msg_time = "Loading stored params"
+if pf.fit_new_params:
+    msg_time = "Fitting new params"
+print_time(end_one_loop_time - ini_loop_time, msg_time)
 
-    print("Evaluating curve fitting for ", prefix, ", index ", str(exp_ind_save))
+# Printing fitted parameters of the SD model
+print("Parameters found by the pipeline for the " + model_str + " model:\n",
+      example_fitting.dict_params['params_name'], "\n", tuned_parameters)
 
-    # Updating index to save
-    dict_params['exp_ind_save'] = exp_ind_save
-
-    # Fitting parameters
-    pf.run_fit(reference_signal, dict_params)
-
-    # Evaluating Model
-    output_model = pf.evaluate_model()
-
-    # Computing efficacy and RMSE value
-    _ = pf.model_stp.get_efficacy_time_ss(num_syn, pf.model_stp.output_spike_events)
-
-    model_stp = pf.model_stp
-    model_str = pf.model_str
-
-    # Time measurements
-    end_one_loop_time = m_time()
-    msg_time = "Loading stored params"
-    if pf.fit_new_params:
-        msg_time = "Fitting new params"
-    print_time(end_one_loop_time - ini_loop_time, msg_time)
-
-
-label = r"Facilitation - $E_{PSC}(t)$ for input at " + str(r_ext[ind]) + "Hz"
-plot_res_mssm(model_stp.time_vector, input_signal, reference_signal, label)
+# Plot of the postsynaptic response
+label = prefix + r" - $E_{PSC}(t)$ for input at " + str(r_ext[ind]) + "Hz"
+plot_res_mssm(pf.model_SD.time_vector, input_signal, np.squeeze(pf.model_SD.get_output()), label)

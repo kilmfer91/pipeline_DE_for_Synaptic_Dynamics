@@ -2,46 +2,16 @@ from utils import *
 from scipy.optimize import curve_fit, differential_evolution, NonlinearConstraint
 
 from synaptic_dynamic_models.MSSM import MSSM_model
-from synaptic_dynamic_models.LAP import LAP_model
 from synaptic_dynamic_models.TM import TM_model
+from synaptic_dynamic_models.SynDynModel import SynDynModel
 
 
-class Fit_params_stp:
-    def __init__(self, max_t, sfreq, dict_params):
+class Fit_params_SD:
 
-        self.Input = None
+    def __init__(self, input_signal, reference_signal, model_SD, dict_params, DE_params):
 
-        # model vars
-        self.params_name = None
-        self.bo = None
-        self.ini = None
-        self.parameters = None
-        self.kwargs_model = None
-        self.model_str = None
-        self.model_stp = None
-        self.fitted_parameters = None
-        self.results_optimization = None
-        self.types_ODE = ['ODE', 'odeint']
-        self.types_optimizer = ['NLS', 'DE']
-        self.types_stp = ['MSSM', 'LAP', 'TM']
-        self.fit_new_params = None
-
-        # Time vars
-        self.sfreq = sfreq
-        self.dt = None
-        self.time_vector = None
-        self.L = None
-        self.max_t = None
-
-        #
-        self.set_time_vars(max_t)
-        self.assert_dict_params(dict_params)
-        self.set_model(dict_params)
-        # self.sample_ini_params(dict_params)
-
-    def __init__(self, sim_params, dict_params):
-
-        self.Input = None
+        # Input
+        self.Input, self.reference_signal = None, None
 
         # model vars
         self.params_name = None
@@ -50,26 +20,26 @@ class Fit_params_stp:
         self.parameters = None
         self.kwargs_model = None
         self.model_str = None
-        self.model_stp = None
+        self.model_SD = None
         self.fitted_parameters = None
         self.results_optimization = None
         self.types_ODE = ['ODE', 'odeint']
         self.types_optimizer = ['NLS', 'DE']
-        self.types_stp = ['MSSM', 'LAP', 'TM']
         self.fit_new_params = None
+        self.dict_params = None
+        self.DE_params = None
 
         # Time vars
-        self.sfreq = None
-        self.dt = None
-        self.time_vector = None
-        self.L = None
-        self.max_t = None
+        self.sfreq, self.dt, self.time_vector, self.L, self.max_t = None, None, None, None, None
 
-        #
-        self.set_time_vars(sim_params)
-        self.assert_dict_params(dict_params)
-        self.set_model(dict_params)
-        # self.sample_ini_params(dict_params)
+        # Initialization
+        self.set_dict_params(dict_params)
+        self.model_str = dict_params['model_str']
+        self.set_model(model_SD)
+        self.set_time_vars(model_SD.sim_params)
+        self.set_input(input_signal)
+        self.set_reference(reference_signal)
+        self.set_DE_params(DE_params)
 
     def set_time_vars(self, sim_params):
         """
@@ -86,7 +56,7 @@ class Fit_params_stp:
         self.L = sim_params['L']
         self.max_t = sim_params['max_t']
 
-    def set_model(self, dict_params):
+    def set_model(self, model_SD):
         """
 
         Parameters
@@ -94,142 +64,84 @@ class Fit_params_stp:
         Returns
         -------
         """
-        self.model_str = dict_params['model_str']
-        # sim_params = {'sfreq': self.sfreq, 'max_t': self.max_t}
-        sim_params = {'sfreq': self.sfreq, 'max_t': self.max_t, 'time_vector': self.time_vector, 'L': self.L}
-
-        # CREATING MODELS
-        if self.model_str == "MSSM":
-            self.model_stp = MSSM_model()
-            self.model_stp.set_simulation_params(sim_params)
-        if self.model_str == "LAP":
-            self.model_stp = LAP_model()
-            self.model_stp.set_simulation_params(sim_params)
-        if self.model_str == "TM":
-            self.model_stp = TM_model()
-            self.model_stp.set_simulation_params(sim_params)
+        # """
+        assert isinstance(model_SD, SynDynModel), "'SD model' must be an instance of SynDynModel"
+        self.model_SD = model_SD
+        # """
 
     def sample_ini_params(self, dict_params=None):
-
-        if dict_params is None:
-            self.params_name = ['tao_c', 'alpha',  # 'C_0', # 'C0',
-                                'V0', 'tao_v',  # 'K_V' 'V_0',
-                                'P0',
-                                'k_NtV', 'k_Nt', 'tao_Nt',  # 'Nt0', 'Nt_0',
-                                'k_EPSP', 'tao_EPSP'  # , 'E_0'
-                                ]
-            self.bo = ((self.dt + .1 * self.dt, 0.0,  # 0.0, # 0.0,
-                        0.0, self.dt + .1 * self.dt,  # 0.0, 0.0,
-                        0.0,
-                        0.0, 0.0, self.dt + .1 * self.dt,  # 0.0, 0.0,
-                        0.0, self.dt + .1 * self.dt  # , 0.0
-                        ),
-                       (5.0, 1.0,  # 10.0, # 10.0,
-                        1.0, 1.0,  # 2000.0, 10.0,
-                        1.0,
-                        2e4, 1e3, 5.0,  # 10.0, 10.0,
-                        2000, 1e-1  # ,100
-                        ))
-            self.ini = [(2e-1, 3e-2), (2e-1, 3e-2), (0, 10), (0, 10),
-                        (0, 1), (2e-1, 3e-2), (500, 200),
-                        (0, 10), (0.0, 1.0),
-                        (0, 2e4), (0, 1e3), (2e-1, 3e-2), (0, 10), (0, 10),
-                        (0, 2000), (2e-2, 3e-4), (0, 100)]
-            ini = self.ini
-            self.parameters = [sn(ini[0]), sn(ini[1]),  # su(ini[2]), # su(ini[3]),
-                               su(ini[4]), sn(ini[5]),  # sn(ini[6]), su(ini[7]),
-                               su(ini[8]),
-                               su(ini[9]), su(ini[10]), sn(ini[11]),  # su(ini[12]), su(ini[13]),
-                               su(ini[14]), sn(ini[15])  # , su(ini[16])
-                               ]
-        else:
-            self.params_name = dict_params['params_name']
-            self.bo = dict_params['bo']
-            self.ini = dict_params['ini']
-            ini = self.ini
-            # self.parameters = dict_params['parameters']
-            self.parameters = []
-            for i in range(len(dict_params['type_sample_param'])):
-                k = dict_params['type_sample_param'][i]
-                if k == 'su':
-                    self.parameters.append(su(ini[i]))
-                if k == 'sn':
-                    self.parameters.append(sn(ini[i]))
-            print("Fit_params_stp, sample_ini_params, ", self.parameters)
+        self.params_name = dict_params['params_name']
+        self.bo = dict_params['bo']
+        self.ini = dict_params['ini']
+        ini = self.ini
+        self.parameters = []
+        for i in range(len(dict_params['type_sample_param'])):
+            k = dict_params['type_sample_param'][i]
+            if k == 'su':
+                self.parameters.append(su(ini[i]))
+            if k == 'sn':
+                self.parameters.append(sn(ini[i]))
+        print("Fit_params_stp, sample_ini_params, ", self.parameters)
         return np.array(self.parameters, dtype='float64')
 
-    def set_input(self, input_vector):
-        self.Input = input_vector
+    def set_dict_params(self, dict_params):
+        self.assert_dict_params(dict_params)
+        self.dict_params = dict_params
 
-    def eval_high_freq_response(self, max_freq, params_name, *parameters):
-        """
-        Evaluation of MSSM response at high frequencies (max_freq)
-        Parameters
-        ----------
-        max_freq
-        params_name
-        parameters
+    def set_input(self, input_signal):
+        self.Input = input_signal
 
-        Returns
-        -------
-        (boolean) whether the parameters lead to the exhaustion of vesicles (the weird behavior) or not
-        """
-        # Simulation parameters
-        sfreq = self.sfreq
-        r = max_freq
-        end_t, max_t = 20.1, 20.2
-        time_vector = np.arange(0, max_t, self.dt)
-        L = time_vector.shape[0]
-        sim_params = {'sfreq': sfreq, 'max_t': max_t, 'L': L, 'time_vector': time_vector}
-        # Input vector
-        Input = input_spike_train(sfreq, r, end_t)
-        Input = np.concatenate((Input, np.zeros(L - Input.shape[0])))
-        Input[0] = 0
-        # Setting the auxiliar model
-        model_stp_aux = MSSM_model(n_syn=1)
-        model_stp_aux.set_simulation_params(sim_params)
-        name_params = mssm_name_params
-        # Creating keyword arguments
-        kwargs_model = {'model': model_stp_aux, 'Input': Input, 'params_name': params_name, 'mode': 'ODE',
-                        'block_ves_dep': True}
-        # Running model
-        model_mssm(time_vector, *parameters, **kwargs_model)
-        # Evaluate condition of weird behavior
-        if len(model_stp_aux.ind_v_minor_to_0) > 0:
-            return True
-        else:
-            return False
+    def set_reference(self, ref_signal):
+        self.reference_signal = ref_signal
 
-    def run_fit(self, ref_vector_, dict_params):
+    def set_DE_params(self, params):
+        self.DE_params = params
+
+    def fun_aux_de(self, x):
+        # self.num_DE_executed += 1
+        eval_model = self.model_SD.run_model(self.time_vector, *x, **self.kwargs_model)
+        # print("model evaluation: ", rmse(ref_vector, eval_model), self.num_DE_executed)
+        return rmse(self.reference_signal * self.output_factor, eval_model)
+
+    def run_DE(self, bo_de):
+        return differential_evolution(self.fun_aux_de, bounds=bo_de, strategy=self.DE_params[0], maxiter=self.DE_params[1],
+                                      popsize=self.DE_params[2], tol=self.DE_params[3], mutation=self.DE_params[4],
+                                      recombination=self.DE_params[5], seed=self.DE_params[6],
+                                      callback=self.DE_params[7], disp=self.DE_params[8], polish=self.DE_params[9],
+                                      init=self.DE_params[10], atol=self.DE_params[11], updating=self.DE_params[12],
+                                      workers=self.DE_params[13], constraints=self.DE_params[14], x0=self.DE_params[15],
+                                      integrality=self.DE_params[16], vectorized=self.DE_params[17])
+
+    def run_fit(self):
+
+        # self.num_DE_executed = 0
 
         # Checking input and reference
         assert self.Input is not None, "Input is not defined"
-        # assert len(ref_vector_) == len(self.Input), "Input and reference must have the same shape"
+        # assert len(self.reference_signal) == len(self.Input), "Input and reference must have the same shape"
 
         # Checking content of dict_params
-        self.assert_dict_params(dict_params)
+        # self.set_dict_params(dict_params)
 
         # Getting other parameters
-        path_to_vars = dict_params['path']
-        ODE_mode = dict_params['ODE_mode']
-        optimizer_mode = dict_params['optimizer_mode']
-        exp_ind_save = dict_params['exp_ind_save']
-        only_spikes = dict_params['only_spikes']
-        restriction_vesicle_depletion = dict_params['restriction_vesicle_depletion']
-        # fit_new_params = dict_params['fit_new_params']
-        suf_file = dict_params['description_file']
+        path_to_vars = self.dict_params['path']
+        ODE_mode = self.dict_params['ODE_mode']
+        optimizer_mode = self.dict_params['optimizer_mode']
+        ind_experiment = self.dict_params['ind_experiment']
+        only_spikes = self.dict_params['only_spikes']
+        suf_file = self.dict_params['description_file']
         no_ini_conditions = False
-        output_factor = 1.
-        if 'no_initial_cond_mssm' in dict_params.keys():
-            no_ini_conditions = dict_params['no_initial_cond_mssm']
-        if 'output_factor' in dict_params.keys():
-            output_factor = dict_params['output_factor']
+        self.output_factor = 1.
+        if 'no_initial_cond_mssm' in self.dict_params.keys():
+            no_ini_conditions = self.dict_params['no_initial_cond_mssm']
+        if 'output_factor' in self.dict_params.keys():
+            self.output_factor = self.dict_params['output_factor']
 
         # Escalation of the ref_vector given the output factor
-        ref_vector = ref_vector_ * output_factor
+        ref_vector = self.reference_signal *  self.output_factor
 
         # Creating name of new file
-        sufix = "_" + str(exp_ind_save)
+        sufix = "_" + str(ind_experiment)
         aux_file = path_to_vars + "param_estimation_" + ODE_mode + "_" + optimizer_mode + "_" + self.model_str + "_" + \
                    suf_file + sufix + ".pkl"
 
@@ -243,55 +155,15 @@ class Fit_params_stp:
             print("Evaluating curve fitting for model", self.model_str)
 
             # Sampling initial parameters
-            ini_params = self.sample_ini_params(dict_params=dict_params)
+            ini_params = self.sample_ini_params(dict_params=self.dict_params)
 
             # defining kwargs
-            self.kwargs_model = {'model': self.model_stp, 'Input': self.Input, 'params_name': self.params_name,
-                                 'mode': ODE_mode, 'only spikes': only_spikes, 'block_ves_dep': False}
+            self.kwargs_model = {'Input': self.Input, 'params_name': self.params_name, 'mode': ODE_mode,
+                                 'only spikes': only_spikes}
 
             def fun_aux_nls(time_vector, *ini_params):
-                if self.model_str == "MSSM":
-                    eval_model = model_mssm(time_vector, *ini_params, **self.kwargs_model)
-                    print("model evaluation: ", rmse(ref_vector, eval_model))
-                    # print("reference vector: ",  ref_vector)
-                    return eval_model
-                elif self.model_str == "LAP":
-                    eval_model = model_lap(time_vector, *ini_params, **self.kwargs_model)
-                    print("model evaluation: ", rmse(ref_vector, eval_model))
-                    return eval_model
-                elif self.model_str == "TM":
-                    eval_model = model_tm(time_vector, *ini_params, **self.kwargs_model)
-                    print("model evaluation: ", rmse(ref_vector, eval_model))
-                    return eval_model
-                else:
-                    assert False, "Error, model not support"
-
-            def fun_aux_de(x):
-                eval_model = None
-                if self.model_str == "MSSM":
-                    eval_model = model_mssm(self.time_vector, *x, **self.kwargs_model)
-                    # Check if the optimization process should consider the restriction of not vesicle depletion
-                    # in high frequency responses
-                    if restriction_vesicle_depletion:
-                        # Restriction that avoids the weird behavior of some fitted parameters for high freq. responses
-                        cond_mssm = self.eval_high_freq_response(100, self.params_name, *x)
-                        # If the weird behavior is shown for the set of parameters 'x', add heavy penalty to
-                        # fitness function
-                        if cond_mssm:
-                            eval_model = (np.mean(eval_model) + eval_model) * 1.1
-                    return rmse(ref_vector, eval_model)
-                elif self.model_str == "LAP":
-                    eval_model = model_lap(self.time_vector, *x, **self.kwargs_model)
-                    # print("model evaluation: ", rmse(ref_vector, eval_model))
-                    return rmse(ref_vector, eval_model)
-                elif self.model_str == "TM":
-                    eval_model = model_tm(self.time_vector, *x, **self.kwargs_model)
-                    # print("model evaluation: ", rmse(ref_vector, eval_model))
-                    return rmse(ref_vector, eval_model)
-                else:
-                    assert False, "Error, model not support"
-
-            # def fun_constraint_de(x): return x[7] / x[6]
+                eval_model = self.model_SD.run_model(time_vector, *ini_params, **self.kwargs_model)
+                return eval_model
 
             # Non-linear least squares optimization method
             if optimizer_mode == 'NLS':
@@ -308,28 +180,20 @@ class Fit_params_stp:
                     bo_de.append((self.bo[0][i], self.bo[1][i]))
                 # constraint on tau Nt
                 # nlc = NonlinearConstraint(fun_constraint_de, self.bo[0][7], self.bo[1][7])
-                results_de = differential_evolution(fun_aux_de, bounds=bo_de, disp=True)  # , constraints=nlc)
+                results_de = self.run_DE(bo_de)  # differential_evolution(fun_aux_de, bounds=bo_de, disp=True)
                 parametersoln = results_de.x
                 self.results_optimization = results_de
             else:
                 assert False, "optimization method not recognized"
 
             # Varibles to save
-            dict_to_save = {"params_name": self.params_name, "bounds": self.bo, "range_ini": self.ini,
-                            "ini_params": ini_params, "params": parametersoln, "reference": ref_vector,
-                            "scaling_factor_ref": output_factor, "res_optimization": self.results_optimization,
-                            'block_ves_dep': restriction_vesicle_depletion}
-
-            # **********************************************************************************************************
-            # FOR MSSM, RUN FREQUENCY ANALYSIS AND SAVE THE INDICES AND FREQUENCIES OF SOLUTIONS WITH WEIRD BEHAVIOR
-            # fa = RUN FREQUENCY ANALYSIS
-            # if self.model_str == "TM":
-            #     dict_to_save['syn_with_ves_dep_behavior'] = fa.MSSM_syn_with_weird_freq
-            # **********************************************************************************************************
+            dict_to_save = {"params_name": self.params_name, "bounds": self.bo, "params": parametersoln,
+                            "reference": ref_vector, "scaling_factor_ref": self.output_factor,
+                            "res_optimization": self.results_optimization}
 
             while check_file(aux_file):
-                exp_ind_save += 1
-                sufix = "_" + str(exp_ind_save)
+                ind_experiment += 1
+                sufix = "_" + str(ind_experiment)
                 aux_file = (path_to_vars + "param_estimation_" + ODE_mode + "_" + optimizer_mode + "_" +
                             self.model_str + "_" + suf_file + sufix + ".pkl")
 
@@ -338,7 +202,7 @@ class Fit_params_stp:
             pickle.dump(dict_to_save, saved_file)
             saved_file.close()
 
-            print("For experiment ", exp_ind_save, ", parameters are: ", parametersoln)
+            print("For experiment ", ind_experiment, ", parameters are: ", parametersoln)
             self.fitted_parameters = parametersoln
 
         # Otherwise try to upload parameters
@@ -352,35 +216,15 @@ class Fit_params_stp:
             self.results_optimization = dict_to_read['res_optimization']
             self.bo = dict_to_read['bounds']
             ref_vector = dict_to_read['reference']
-
-            # ref_vector /= output_factor
             output_factor = dict_to_read['scaling_factor_ref']
-            # no_ini_con = False
-            # if 'no_ini_cond' in dict_to_read.keys():
-            #     no_ini_con = dict_to_read['no_ini_cond']
-            # Creating model
-            # mssm = MSSM_model(p_lap=aux_p, no_ini_cond=no_ini_con)
-            # mssm.set_simulation_params(sim_params)
-
-            restriction_vesicle_depletion = False
-            if 'block_ves_dep' in dict_to_read.keys():
-                restriction_vesicle_depletion = dict_to_read['block_ves_dep']
-
-            self.kwargs_model = {'model': self.model_stp, 'Input': self.Input,
-                                 'params_name': dict_to_read['params_name'], 'mode': ODE_mode,
-                                 'only spikes': only_spikes, 'block_ves_dep': restriction_vesicle_depletion}
+            self.kwargs_model = {'Input': self.Input, 'params_name': dict_to_read['params_name'], 'mode': ODE_mode,
+                                 'only spikes': only_spikes}
             # ref_vector *= output_factor
 
         return self.fitted_parameters
 
     def evaluate_model(self):
-        # Evaluating MSSM
-        if self.model_str == "MSSM":
-            model_mssm(self.time_vector, *self.fitted_parameters, **self.kwargs_model)
-        elif self.model_str == "LAP":
-            model_lap(self.time_vector, *self.fitted_parameters, **self.kwargs_model)
-        elif self.model_str == "TM":
-            model_tm(self.time_vector, *self.fitted_parameters, **self.kwargs_model)
+        eval_model = self.model_SD.run_model(self.time_vector, *self.fitted_parameters, **self.kwargs_model)
 
     def assert_dict_params(self, dict_params):
         assert isinstance(dict_params, dict), "dict_params must be a Dictionary"
@@ -391,14 +235,11 @@ class Fit_params_stp:
         assert 'type_sample_param' in dict_params.keys(), "dict_params must have 'type_sample_param' as key"
         assert 'ODE_mode' in dict_params.keys(), "dict_params must have 'ODE_mode' as key"
         assert 'optimizer_mode' in dict_params.keys(), "dict_params must have 'optimizer_mode' as key"
-        assert 'exp_ind_save' in dict_params.keys(), "dict_params must have 'exp_ind_save' as key"
+        assert 'ind_experiment' in dict_params.keys(), "dict_params must have 'ind_experiment' as key"
         assert 'only_spikes' in dict_params.keys(), "dict_params must have 'only_spikes' as key"
-        # assert 'fit_new_params' in dict_params.keys(), "dict_params must have 'fit_new_params' as key"
-        assert 'restriction_vesicle_depletion' in dict_params.keys(), "dict_params must have 'restriction_vesicle_depletion' as key"
         assert 'path' in dict_params.keys(), "dict_params must have 'path' as key"
         assert 'description_file' in dict_params.keys(), "dict_params must have 'description_file' as key"
         assert isinstance(dict_params['model_str'], str), "'model' must be a string"
-        assert dict_params['model_str'] in self.types_stp, "dict_params['model_str'] must be in " + str(self.types_stp)
         assert isinstance(dict_params['params_name'], list), "'params_name' must be a list"
         assert isinstance(dict_params['bo'], tuple), "'bo' must be a tuple"
         assert len(dict_params['bo']) == 2, "'bo' must be a tuple of 2 values"
@@ -439,10 +280,9 @@ class Fit_params_stp:
         assert isinstance(dict_params['optimizer_mode'], str), "dict_params['optimizer_mode'] must be a string"
         assert dict_params['optimizer_mode'] in self.types_optimizer, ("dict_params['optimizer_mode'] must be in " +
                                                                        str(self.types_optimizer))
-        assert isinstance(dict_params['exp_ind_save'], int), "dict_params['exp_ind_save'] must be an int"
-        assert dict_params['exp_ind_save'] >= 0, "dict_params['exp_ind_save'] must be positive or zero"
+        assert isinstance(dict_params['ind_experiment'], int), "dict_params['ind_experiment'] must be an int"
+        assert dict_params['ind_experiment'] >= 0, "dict_params['ind_experiment'] must be positive or zero"
         assert isinstance(dict_params['only_spikes'], bool), "'only_spikes' must be a boolean"
-        # assert isinstance(dict_params['fit_new_params'], bool), "'fit_new_params' must be a boolean"
-        assert isinstance(dict_params['restriction_vesicle_depletion'], bool), "'restriction_vesicle_depletion' must be a boolean"
         assert os.path.isdir(dict_params['path']), "Folder %s does not exist" % dict_params['path']
         assert isinstance(dict_params['description_file'], str), "dict_params['description_file'] must be a string"
+

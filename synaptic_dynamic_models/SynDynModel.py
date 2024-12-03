@@ -1,5 +1,6 @@
 import numpy as np
 
+
 class SynDynModel:
     def __init__(self, n_syn=1):
 
@@ -32,14 +33,13 @@ class SynDynModel:
         # Parameters - IMPLEMENT ON EACH CHILD CLASS
         self.params = None
 
-        # Simulation parameters
-        self.sim_params = {'sfreq': 1000, 'max_t': 0.8}
+        # Simulation parameters (default: 1 sec, with sampling frequency of 1KHz)
+        self.sim_params = {'sfreq': 1000, 'max_t': 1.0, 'L': 1000, 'time_vector': np.arange(0, 1, 0.001)}
 
     def set_simulation_params(self, sim_params=None):
-        assert isinstance(self.sim_params, dict), "'sim_params' must be a dictionary"
-
+        # assert isinstance(self.sim_params, dict), "'sim_params' must be a dictionary"
         if sim_params is not None:
-            assert type(sim_params) != 'dict', 'params should be a dict'
+            assert isinstance(sim_params, dict), 'params should be a dict'
             for key, value in sim_params.items():
                 if key in self.sim_params.keys():
                     self.sim_params[key] = value
@@ -205,7 +205,6 @@ class SynDynModel:
                     end_loop_break = True
                     break
 
-        # """
         # If the loop does not break, update with True all last positions of matrix of conditions
         if not end_loop_break:
             conditions_matrix[:, -1] = True
@@ -221,18 +220,7 @@ class SynDynModel:
                 a = np.logical_xor(unique_cond[0][:, j - 1], unique_cond[0][:, j])
                 # evaluated_syn = np.logical_not(np.logical_or(evaluated_syn, a))
                 b = np.logical_and(a, np.logical_not(evaluated_syn)) * unique_cond[1][j]
-                # The condition to establish that a synapses reaches the steady-state value is that the variation in the
-                # last 10 spike events is less than an epsilon value.
-                # When a synapse reaches that condition for a particular i-spike event, and then does not satisfy the
-                # condition for the (i + 1)-spike event, then the function np.unique() returns an unordered array of
-                # unique values (in unique_cond[1]), making the computation of the step to reach the steady-state being
-                # wrong. To solve that, check if the position when unique_cond loses the order, and check if there is
-                # a wrong computation of steady-sate in the synapse associated to that position. The criteria to define
-                # if is a wrong computation is that the step for steady-state cannot be greater than the maximum unique
-                # step in unique_cond.
                 aux_t = t_ss + b
-                # Checking if the order of unique_cond is lost
-                # if unique_cond[1][j] < unique_cond[1][j - 1]:
 
                 # checking if the computation of step steady-state is wrong
                 if np.max(aux_t) > max_step_cond:
@@ -240,15 +228,12 @@ class SynDynModel:
                     aux_t[ind_wrong_tss] -= b[ind_wrong_tss]
                 t_ss = aux_t
 
-                # else:
-                #     t_ss = aux_t
                 evaluated_syn = np.logical_or(evaluated_syn, a)
 
         efficacy = np.abs((output_aux[t_ss] / output_aux[0, :])[0])  # np.abs(output_aux[t_ss][0])  #
         output_steady_state = output_aux[t_ss][0]
         t_steady_state = t_ss
 
-        # """
         # If the maximum response is similar to the last-input-spike response, then set the index to
         # the length of the input
         ss_output_aux = np.array(output_spike_events)
@@ -257,8 +242,7 @@ class SynDynModel:
         out_last_spike = output_aux[-1]
 
         conditions = abs_output[:, ind_max_out].diagonal() - output_steady_state < 1e-9
-        aux_time_max = np.logical_not(conditions) * ind_max_out + conditions * model_output.shape[1]  # * self.dt
-        # aux_time_ss = t_ss  # / r
+        aux_time_max = np.logical_not(conditions) * ind_max_out + conditions * model_output.shape[1]
         aux_eff_2 = output_steady_state / model_output[:, ind_max_out].diagonal()
         aux_eff_3 = np.abs(model_output[:, ind_max_out].diagonal() / ss_output_aux[0, :])
 
@@ -307,7 +291,6 @@ class SynDynModel:
                     end_loop_break = True
                     break
 
-        # """
         # If the loop does not break, update with True all last positions of matrix of conditions
         if not end_loop_break:
             conditions_matrix[:, -1] = True
@@ -321,20 +304,8 @@ class SynDynModel:
             max_step_cond = np.max(unique_cond[1])
             for j in range(1, len(unique_cond[1])):
                 a = np.logical_xor(unique_cond[0][:, j - 1], unique_cond[0][:, j])
-                # evaluated_syn = np.logical_not(np.logical_or(evaluated_syn, a))
                 b = np.logical_and(a, np.logical_not(evaluated_syn)) * unique_cond[1][j]
-                # The condition to establish that a synapses reaches the steady-state value is that the variation in the
-                # last 10 spike events is less than an epsilon value.
-                # When a synapse reaches that condition for a particular i-spike event, and then does not satisfy the
-                # condition for the (i + 1)-spike event, then the function np.unique() returns an unordered array of
-                # unique values (in unique_cond[1]), making the computation of the step to reach the steady-state being
-                # wrong. To solve that, check if the position when unique_cond loses the order, and check if there is
-                # a wrong computation of steady-sate in the synapse associated to that position. The criteria to define
-                # if is a wrong computation is that the step for steady-state cannot be greater than the maximum unique
-                # step in unique_cond.
                 aux_t = t_ss + b
-                # Checking if the order of unique_cond is lost
-                # if unique_cond[1][j] < unique_cond[1][j - 1]:
 
                 # checking if the computation of step steady-state is wrong
                 if np.max(aux_t) > max_step_cond:
@@ -342,8 +313,6 @@ class SynDynModel:
                     aux_t[ind_wrong_tss] -= b[ind_wrong_tss]
                 t_ss = aux_t
 
-                # else:
-                #     t_ss = aux_t
                 evaluated_syn = np.logical_or(evaluated_syn, a)
 
         efficacy = output_aux[t_ss][0]  # (output_aux[t_ss] / output_aux[0, :])[0]  #
@@ -351,3 +320,99 @@ class SynDynModel:
         t_steady_state = t_ss
 
         return efficacy, output_steady_state, t_steady_state
+
+    # @staticmethod
+    def run_model(self, time_vector, *args, **kwargs):
+        """
+        Simulation of synapses of SynDynModel objects for a given input (kwargs['Input']), a given set of parameters
+        (names of parameters - kwargs['params_name'], parameters - args), and the way to compute the time functions
+        (kwargs['ODE_model']). The output can be the time-series of the SD_model's postsynaptic response, or it can be
+        only the responses to the input spikes (kwargs['only spikes']).
+        :param time_vector: (numpy array [t, ]) time vector for simulation.
+        :param args: (numpy array [Num_P, ]) set of Num_P parameters for the SD model to simulate.
+        :param kwargs: (dictionary {'Input': a, 'params_name': b, 'mode': c, 'only spikes': d})
+                       Extra parameters to specify:
+                       a (numpy array [t, ]) the input spike train.
+                       b (list) the name of parameters. It must have the same size as *args, and it must  contain at
+                         least one name of the parameteres of the SD model:
+                       c (String) the type of ODE solver supported by SynDynModel. Up to now, there are two options:
+                         'ODE': for Euler method.
+                         'Analytical': for analytical solution of equations (no ODE solver).
+                       d (boolean) if True, the output of the model is only the postsynaptic response of the input
+                         spikes, otherwise it is the time-series of the postsynaptic response.
+        :return: model_SD.get_output() (numpy array [t, ]) postsynaptic response.
+
+        As example, the parameters of the MSSM model should look like this:
+        param = {kwargs['params_name'][0]: args[0], kwargs['params_name'][1]: args[1],
+                 kwargs['params_name'][2]: args[2], kwargs['params_name'][3]: args[3],
+                 kwargs['params_name'][4]: args[4], kwargs['params_name'][5]: args[5],
+                 kwargs['params_name'][6]: args[6], kwargs['params_name'][7]: args[7],
+                 kwargs['params_name'][8]: args[8], kwargs['params_name'][9]: args[9]}
+        given the numpy array of args = np.array([args[0], args[1], args[2], args[3], args[4],
+                                                  args[5], args[6], args[7], args[8], args[9]])
+        and the list of kwargs['params_name'] = ['tau_c', 'alpha', 'V0', 'tau_v', 'P0',
+                                                 'k_NtV', 'k_Nt', 'tau_Nt', 'k_EPSP', 'tau_EPSP']
+        """
+
+        # Local variables
+        params_name = kwargs['params_name']
+        Input = kwargs['Input']
+        output_model = None
+        # model_SD = kwargs['model']
+        param = {}
+        return_only_spike_event = False
+        output_spike_events = []
+        L = len(time_vector)
+
+        # Creating param dictionary
+        for i in range(len(args)):
+            param[params_name[i]] = args[i]
+
+        # Update parameters and initial conditions
+        self.set_model_params(param)
+        self.set_initial_conditions()
+
+        # If there is a neuron model
+        model_neuron = None
+        if "model_neuron" in kwargs:
+            if kwargs['model_neuron'] is not None:
+                model_neuron = kwargs['model_neuron']
+                model_neuron.set_simulation_params()
+
+        # Returning the entire time series or only the response after an input spike
+        if "only spikes" in kwargs:
+            return_only_spike_event = kwargs['only spikes']
+
+        # Evaluating SD model
+        if kwargs['mode'] == "odeint":
+            self.evaluate_odeint_time(time_vector, Input)
+        else:
+            for t in range(L):
+                if kwargs['mode'] == "ODE":
+                    self.evaluate_model_euler(Input[t], t)
+                else:
+                    assert False, "'ODE mode' must be either 'ODE' or 'odeint'"
+
+                # Evaluating neuron response
+                if model_neuron is not None:
+                    model_neuron.update_state(self.get_output[:, it], t)
+                    # Output based on the neuron model
+                    output_model = model_neuron.membrane_potential
+                else:
+                    # Output based on the SD model
+                    output_model = self.get_output()
+
+                # Detecting spike events and storing model output
+                self.detect_spike_event(t, output_model)
+
+            # Computing output spike event in the last ISI
+            t = L
+            spike_range = (self.time_spike_events[-1], t)
+            self.compute_output_spike_event(spike_range, output_model)
+
+        if return_only_spike_event:
+            return np.array(self.output_spike_events)
+        if model_neuron is not None:
+            return model_neuron.membrane_potential
+        else:
+            return self.get_output()
