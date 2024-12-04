@@ -213,10 +213,6 @@ class Example_fitting:
                                 'params_name': params_name_mssm,
                                 'bo': ((2 * dt, 0.0, 0.02, 2 * dt, 0.0, 1.0, 1e-1, dt, 1e-3, 2 * dt),
                                        (5.0,    10,  1e2,  1.0,    1.0, 1e2, 1.0, 5.0, 1e0, 10 * dt)),
-                                'ini': [(9e-2, 3e-3), (5e-1, 3e-3), (5e0, 1e1), (5e-1, 3e-2), (1e-2, 1.0),
-                                        (5e1, 1e1), (1e-1, 1e0), (min_n, 5), (5e-1, 3e-2), (2 * dt, 5 * dt)],
-                                'type_sample_param': ['sn', 'sn', 'su', 'sn', 'su', 'sn', 'su', 'su', 'sn', 'su'],
-                                'optimizer_mode': 'DE',
                                 'ODE_mode': 'ODE',
                                 'ind_experiment': 0,
                                 'only_spikes': False,
@@ -234,16 +230,12 @@ class Example_fitting:
                                 'params_name': params_name_tm,
                                 'bo': ((0.0, 2 * dt, 2 * dt, 0.0, 2 * dt),
                                        (1.0, 1.0, 1.0, 1e4, 10.0)),
-                                'ini': [(0, 1), (2e-1, 3e-2), (2e-1, 3e-2), (0.0, 1e4), (2e-1, 3e-2)],
-                                'type_sample_param': ['su', 'sn', 'sn', 'su', 'sn'],
-                                'optimizer_mode': 'DE',
                                 'ODE_mode': 'ODE',
                                 'ind_experiment': 0,
                                 'only_spikes': False,
                                 'path': self.path_outputs,
                                 'description_file': description,
-                                'output_factor': -self.output_factor,
-                                'restriction_vesicle_depletion': False,
+                                'output_factor': -self.output_factor
                                 }
 
     def params_sim(self):
