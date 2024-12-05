@@ -213,4 +213,3 @@ class Fit_params_SD:
         assert os.path.isdir(dict_params['path']), "Folder %s does not exist" % dict_params['path']
         assert isinstance(dict_params['description_file'], str), "dict_params['description_file'] must be a string"
         assert isinstance(dict_params['output_factor'], float), "dict_params['output_factor'] must be a float"
-

@@ -83,7 +83,7 @@ class SynDynModel:
         # When t is 0
         if t == 0:
             # Detecting raising edges
-            self.edge_detection = np.where(self.Input[:, t] == 1)[0]
+            self.edge_detection = np.where(self.Input[:, t] > 0.0)[0]
         else:
             # Edge detector
             self.edge_detection = self.Input[:, t] > self.Input[:, t - 1]
@@ -141,7 +141,7 @@ class SynDynModel:
         num_signals = input_signals.shape[1]
         # getting maximum after computing abs(input_signals)
         maxi = np.max(np.abs(input_signals), axis=0)
-        # Setting the epsilon error. By default it is proportional to the max value of each signal
+        # Setting the epsilon error. By default, it is proportional to the max value of each signal
         if epsilon is None:
             epsilon = 1e-10 * maxi
 

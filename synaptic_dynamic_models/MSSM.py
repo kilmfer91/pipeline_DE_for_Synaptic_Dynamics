@@ -71,8 +71,6 @@ class MSSM_model(SynDynModel):
         self.E_0 = self.params['E_0']
         # Adjusting parameters to make the system independent of the sampling frequency
         self.K_V = self.sim_params['sfreq']
-        # Setting initial conditions
-        # self.set_initial_conditions()
 
     def set_initial_conditions(self, Input=None):
         """
@@ -133,7 +131,6 @@ class MSSM_model(SynDynModel):
         :param I_t: (numpy array (n, t)) value of n-inputs at time t
         :param t: (int) time value
         """
-        # print("Evaluating euler method for class MSSM")
         # Input
         self.Input[:, t] = I_t
         alpha = self.alpha / self.dt
@@ -150,7 +147,6 @@ class MSSM_model(SynDynModel):
             dV_aux = (-self.K_V * (self.P0 * I_t)) * self.dt
             self.V[:, t] = dV_aux + self.V0
             # Neurotransmitter buffering
-            # dV = self.V[:, t] - self.params['V0']
             dN_aux = k_NtV * -dV_aux * I_t * self.dt
             self.N[:, t] = dN_aux + self.Nt0
             # Excitatory Postsynaptic contribution
@@ -165,9 +161,7 @@ class MSSM_model(SynDynModel):
             # Vesicle release
             dV_aux = (((self.V0 - self.V[:, t - 1]) / self.tau_v) - self.K_V * (self.P[:, t] * I_t)) * self.dt
             self.V[:, t] = np.clip(dV_aux + self.V[:, t - 1], 0, None)
-            # self.V[:, t] = dV_aux + self.V[:, t - 1]
             # Neurotransmitter buffering
-            # dV = self.V[:, t] - self.V[:, t - 1]  # self.d_V[:, t]
             dN_aux = (k_NtV * -dV_aux * I_t + ((self.Nt0 - self.k_Nt * self.N[:, t - 1]) / self.tau_Nt)) * self.dt
             self.N[:, t] = dN_aux + self.N[:, t - 1]
             # Excitatory Postsynaptic contribution
