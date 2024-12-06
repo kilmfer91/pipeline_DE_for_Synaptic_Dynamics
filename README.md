@@ -96,8 +96,9 @@ the models MSSM and TM for simulating the mechanisms of depression or facilitati
   * ```param_estimation_MSSM_0_0.pkl``` (MSSM for facilitation)
   * ```param_estimation_MSSM_1_0.pkl``` (MSSM for depression)
   * ```param_estimation_TM_0_0.pkl``` (TM for facilitation)
-  * ```param_estimation_TM_1_0.pkl``` (TM for depression)
-  If ```ind_experiment``` is set to ```0```, one of the stored files will be loaded,
+  * ```param_estimation_TM_1_0.pkl``` (TM for depression)  
+
+If ```ind_experiment``` is set to ```0```, one of the stored files will be loaded,
   otherwise the pipeline will run an experiment of DE to tune the parameters of the 
   ```SD_model``` for the given reference data.
 
