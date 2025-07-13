@@ -18,7 +18,7 @@ model_str = "MSSM"  # String defining the model to use (e.g. MSSM, TM, LAP)
 
 # AUXILIAR VARIABLES FOR THE EXAMPLE
 ind = 0                 # Auxiliar index to define the Synaptic Dynamics mechanism (0: depression, 1: facilitation)
-ind_experiment = 4      # Index of experiment to run/load
+ind_experiment = 1      # Index of experiment to run/load
 num_experiments = 1     # Number of experiments to run
 prefix = prefix_v[ind]  # string defining a description of the SD model: "depression" or "facilitation"
 
