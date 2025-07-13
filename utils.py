@@ -20,11 +20,13 @@ path_outputs_ext = "../../outputs/fitting_test/"
 # External parameters for MSSM with 1 synapse. Facilitation
 params_name_mssm = ['tau_c', 'alpha', 'V0', 'tau_v', 'P0', 'k_NtV', 'k_Nt', 'tau_Nt', 'k_EPSP', 'tau_EPSP']
 ext_par_mssm = [3e-3, 905e-4, 3.45, 8.4e-3, 0.002, 1, 1, 13.5e-3, 10, 9e-3, 0.0, 0.0]  # From Karim C0 0.05
+selected_params_mssm = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
 """TM Model"""
 # From the paper "Differential signaling via the same axon of neocortical pyramidal neurons" Markram, Wang, Tsodyks
 params_name_tm = ['U0', 'tau_f', 'tau_d', 'Ase', 'tau_syn']
 ext_par_tm = [0.03, 530e-3, 130e-3, 1540, 2.5e-3]
+selected_params_tm = [0, 1, 2, 3, 4]
 
 # labels for uploading examples of facilitation and depression
 prefix_v = ['depression', 'facilitation']
@@ -32,13 +34,13 @@ prefix_v = ['depression', 'facilitation']
 # ******************************************************************************************************************
 # TIME CONDITIONS
 r_ext = [10, 30]  # Frequency of the spike train (Hz)
-sfreq_ext = [2e3, 5e3]  # Sampling frequency (Hz)
+sfreq_ext = [2e3, 2e3]  # [2e3, 5e3]  # Sampling frequency (Hz)
 ini_t_ext = [.1, .04]  # Initial time of simulation (s)
 end_t_ext = [3.1, .55]  # Maximum time of spike train (s) (MUST BE LESS THAN max_t_v)
-max_t_ext = [3.5, .8]  # Maximum time of simulation (s)
+max_t_ext = [2.0, 1.2]  # [3.5, .8] # Maximum time of simulation (s)
 # Input-Output factors
 input_factor_ext = [1.0, 1.0]
-output_factor_ext = [1.0, 1.0]
+output_factor_ext = [-1.0, -1.0]
 
 
 # **********************************************************************************************************************
@@ -94,7 +96,18 @@ def check_file(file):
 
 
 def rmse(x, y):
-    return np.square(np.subtract(x, y)).mean()
+    if x.ndim != y.ndim:
+        while x.ndim < y.ndim:
+            x = np.expand_dims(x, axis=x.ndim)
+        while y.ndim < x.ndim:
+            y = np.expand_dims(y, axis=x.ndim)
+
+    # aligning time dimension in last dimension
+    if x.shape[-1] != y.shape[-1]:
+        x = x.T
+
+    # Computing RMSE in dim 1 (last dimension) for preserving the num of synapses
+    return np.square(np.subtract(x, y)).mean(axis=1)
 
 
 def su(params):
@@ -105,22 +118,82 @@ def sn(params):
     return np.random.normal(params[0], params[1])
 
 
-def plot_res_mssm(time_vector, input_signal, reference_signal, label):
-    fig = plt.figure(figsize=(12, 2.8))
-    plt.suptitle(label)
-    ax = fig.add_subplot(121)
-    ax.plot(time_vector, input_signal, c='gray')
-    ax.set_xlabel("time(s)")
-    ax.set_ylabel("Spikes")
-    ax.set_title("Input Spike train")
+def plot_temp_mssm(model_stp, fig, titleSize=12, labelSize=9, ind_interest=0):
+    time_vector = model_stp.time_vector
+    output = model_stp.get_output()
+
+    ax = fig.add_subplot(231)
+    if ind_interest is None:
+        ax.fill_between(time_vector, np.min(model_stp.C, axis=0), np.max(model_stp.C, axis=0), color="darkgrey",
+                        alpha=0.3)
+        ax.plot(time_vector, np.mean(model_stp.C, axis=0), c='black')
+    else:
+        ax.plot(time_vector, model_stp.C[ind_interest, :])
+    ax.set_title(r'C(t) [$\mu$M]', fontsize=titleSize)
+    ax.set_xlabel('time (s)', c='gray', fontsize=labelSize)
+    # ax.set_ylabel(r'', c='gray', fontsize=labelSize)
+    ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+    ax.yaxis.offsetText.set_fontsize(8)
     ax.grid()
-    ax = fig.add_subplot(122)
-    ax.plot(time_vector, reference_signal, c='gray')
-    ax.set_xlabel("time(s)")
-    ax.set_ylabel("A")
-    ax.set_title("Postsynaptic response")
+
+    ax = fig.add_subplot(232)
+    if ind_interest is None:
+        ax.fill_between(time_vector, np.min(model_stp.V, axis=0), np.max(model_stp.V, axis=0), color="darkgrey",
+                        alpha=0.3)
+        ax.plot(time_vector, np.mean(model_stp.V, axis=0), c='black')
+    else:
+        ax.plot(time_vector, model_stp.C[ind_interest, :])
+    ax.set_title(r'V(t) [$\mu$M]', fontsize=titleSize)
+    ax.set_xlabel('time (s)', c='gray', fontsize=labelSize)
+    # ax.set_ylabel(r'', fontsize=labelSize)
+    ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+    ax.yaxis.offsetText.set_fontsize(8)
     ax.grid()
-    fig.tight_layout(pad=0.5, w_pad=0.1, h_pad=1.0)
+
+    ax = fig.add_subplot(233)
+    if ind_interest is None:
+        ax.fill_between(time_vector, np.min(model_stp.P, axis=0), np.max(model_stp.P, axis=0), color="darkgrey",
+                        alpha=0.3)
+        ax.plot(time_vector, np.mean(model_stp.P, axis=0), c='black')
+    else:
+        ax.plot(time_vector, model_stp.P[ind_interest, :])
+    ax.set_title('$P(t)$', fontsize=titleSize)
+    ax.set_xlabel('time (s)', c='gray', fontsize=labelSize)
+    ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+    ax.yaxis.offsetText.set_fontsize(8)
+    ax.grid()
+
+    ax = fig.add_subplot(234)
+    if ind_interest is None:
+        ax.fill_between(time_vector, np.min(model_stp.N, axis=0), np.max(model_stp.N, axis=0), color="darkgrey",
+                        alpha=0.3)
+        ax.plot(time_vector, np.mean(model_stp.N, axis=0), c='black')
+    else:
+        ax.plot(time_vector, model_stp.N[ind_interest, :])
+    ax.set_title(r'$N(t)$ [$\mu$M]', fontsize=titleSize)
+    ax.set_xlabel('time (s)', c='gray', fontsize=labelSize)
+    # ax.set_ylabel('$\mu$M')
+    ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+    ax.yaxis.offsetText.set_fontsize(8)
+    ax.grid()
+
+    ax = fig.add_subplot(235)
+    if ind_interest is None:
+        ax.plot(time_vector, np.mean(output, axis=0), c='black')
+        ax.fill_between(time_vector, np.min(output, axis=0), np.max(output, axis=0), color="darkgrey",
+                        alpha=0.3)
+    else:
+        ax.plot(time_vector, output[ind_interest, :])
+    ax.set_title('$EPSP(t)$ [mV]', fontsize=titleSize)
+    ax.set_xlabel('time (s)', c='gray', fontsize=labelSize)
+    # ax.set_ylabel('$\mu$M')
+    ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+    ax.yaxis.offsetText.set_fontsize(8)
+    ax.grid()
+
+    fig.subplots_adjust(top=0.92)
+    # Final adjustments
+    fig.tight_layout(pad=0.5, w_pad=1.0, h_pad=1.0)
 
 
 # **********************************************************************************************************************
@@ -139,6 +212,7 @@ class Example_fitting:
         self.output_factor = None
         self.time_vector = None
         self.L = None
+        self.r = None
 
         # params dictionaries
         self.dict_params = None
@@ -153,7 +227,7 @@ class Example_fitting:
         """
         args =
         :param ind:
-        :param args_: tuple() [r_v, sfreq_v, max_t_v, input_factor_v, output_factor_v, description]
+        :param args_: tuple() [sfreq_v, max_t_v, input_factor_v, output_factor_v, description, r_v]
         :return:
         """
         args = args_[0]
@@ -166,6 +240,8 @@ class Example_fitting:
             input_factor_v = input_factor_ext
         if args[3] is None:
             output_factor_v = output_factor_ext
+        if args[5] is None:
+            r_v = r_ext
 
         self.sfreq = args[0]
         self.dt = 1 / self.sfreq
@@ -174,6 +250,7 @@ class Example_fitting:
         self.output_factor = args[3]
         self.time_vector = np.arange(0, self.max_t, self.dt)
         self.L = self.time_vector.shape[0]
+        self.r = args[5]
 
         # assigning dictionaries of parameters
         self.params_sim()
@@ -211,14 +288,16 @@ class Example_fitting:
             min_n = 2 * dt
             self.dict_params = {'model_str': self.model_str,
                                 'params_name': params_name_mssm,
-                                'bo': ((2 * dt, 0.0, 0.02, 2 * dt, 0.0, 1.0, 1e-1, dt, 1e-3, 2 * dt),
-                                       (5.0,    10,  1e2,  1.0,    1.0, 1e2, 1.0, 5.0, 1e0, 10 * dt)),
+                                'bo': ((2 * dt, 0.0, 0.02, 2 * dt, 0.0, 1.0, 1e-1, 2 * dt,  1e-3, 2 * dt),
+                                       (0.1,    10,  1e2,  1.0,    1.0, 1e2, 1.0,  10 * dt, 1e0,  10 * dt)),
                                 'ODE_mode': 'ODE',
                                 'ind_experiment': 0,
                                 'only_spikes': False,
                                 'path': self.path_outputs,
                                 'description_file': description,
-                                'output_factor': -self.output_factor,
+                                'output_factor': self.output_factor,
+                                'frequency_reference': False,
+                                'ref_freq_vector': None,
                                 }
 
         if self.model_str == 'TM':
@@ -229,13 +308,14 @@ class Example_fitting:
             self.dict_params = {'model_str': self.model_str,
                                 'params_name': params_name_tm,
                                 'bo': ((0.0, 2 * dt, 2 * dt, 0.0, 2 * dt),
-                                       (1.0, 1.0, 1.0, 1e4, 10.0)),
+                                       (1.0, 1.0,    1.0,    1e4, 10.0)),
                                 'ODE_mode': 'ODE',
                                 'ind_experiment': 0,
                                 'only_spikes': False,
                                 'path': self.path_outputs,
                                 'description_file': description,
-                                'output_factor': -self.output_factor
+                                'output_factor': self.output_factor,
+                                'frequency_reference': False,
                                 }
 
     def params_sim(self):

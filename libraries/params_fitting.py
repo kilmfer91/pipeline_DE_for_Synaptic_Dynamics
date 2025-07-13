@@ -4,6 +4,7 @@ from scipy.optimize import curve_fit, differential_evolution, NonlinearConstrain
 from synaptic_dynamic_models.MSSM import MSSM_model
 from synaptic_dynamic_models.TM import TM_model
 from synaptic_dynamic_models.SynDynModel import SynDynModel
+from libraries.frequency_analysis import Freq_analysis
 
 
 class Fit_params_SD:
@@ -29,6 +30,7 @@ class Fit_params_SD:
         self.fit_new_params = None
         self.dict_params = None
         self.DE_params = None
+        self.fa = None
 
         # Time vars
         self.sfreq, self.dt, self.time_vector, self.L, self.max_t = None, None, None, None, None
@@ -38,7 +40,8 @@ class Fit_params_SD:
         self.model_str = dict_params['model_str']
         self.set_model(model_SD)
         self.set_time_vars(model_SD.sim_params)
-        assert len(reference_signal) == len(input_signal), "Input and reference must have the same shape"
+        if not self.dict_params['only_spikes'] and not self.dict_params['frequency_reference']:
+            assert len(reference_signal) == len(input_signal), "Input and reference must have the same shape"
         self.set_input(input_signal)
         self.set_reference(reference_signal)
         self.set_DE_params(DE_params)
@@ -74,6 +77,10 @@ class Fit_params_SD:
     def set_dict_params(self, dict_params):
         self.assert_dict_params(dict_params)
         self.dict_params = dict_params
+        self.bo = self.dict_params['bo']
+        self.params_name = self.dict_params['params_name']
+        self.kwargs_model = {'Input': self.Input, 'params_name': self.params_name, 'mode': dict_params['ODE_mode'],
+                             'only spikes': dict_params['only_spikes']}
 
     def set_input(self, input_signal):
         self.Input = input_signal
@@ -89,8 +96,31 @@ class Fit_params_SD:
         # print("model evaluation: ", rmse(ref_vector, eval_model), self.num_DE_executed)
         return rmse(self.reference_signal * self.output_factor, eval_model)
 
-    def run_DE(self, bo_de):
-        return differential_evolution(self.fun_aux_de, bounds=bo_de, strategy=self.DE_params[0],
+    def fun_aux_freq_de(self, x):
+        # Creating param dictionary to run freq analysis on the new parameters x
+        param = {}
+        for i in range(len(x)):
+            param[self.kwargs_model['params_name'][i]] = x[i]
+        self.model_SD.set_model_params(param)
+
+        # Creating instance of Freq_analysis
+        self.fa = Freq_analysis(sim_params=self.model_SD.sim_params, loop_f=self.dict_params['ref_freq_vector'],
+                                n_syn=x.shape[1])
+        self.fa.set_model(model_str=self.model_SD, name_params=list(self.model_SD.params.keys()),
+                          model_params=list(self.model_SD.params.values()))
+
+        # Run frequency analysis
+        self.fa.run()
+
+        return rmse(self.reference_signal * self.output_factor, self.fa.efficacy)
+
+    def run_DE(self, bo_de, freq_ref=False):
+        fun_aux = None
+        if freq_ref:
+            fun_aux = self.fun_aux_freq_de
+        else:
+            fun_aux = self.fun_aux_de
+        return differential_evolution(fun_aux, bounds=bo_de, strategy=self.DE_params[0],
                                       maxiter=self.DE_params[1], popsize=self.DE_params[2], tol=self.DE_params[3],
                                       mutation=self.DE_params[4], recombination=self.DE_params[5],
                                       seed=self.DE_params[6], callback=self.DE_params[7], disp=self.DE_params[8],
@@ -101,13 +131,12 @@ class Fit_params_SD:
 
     def run_fit(self):
         # Getting other parameters
-        self.bo = self.dict_params['bo']
-        self.params_name = self.dict_params['params_name']
         path_to_vars = self.dict_params['path']
         ODE_mode = self.dict_params['ODE_mode']
         ind_experiment = self.dict_params['ind_experiment']
         only_spikes = self.dict_params['only_spikes']
         suf_file = self.dict_params['description_file']
+        freq_ref = self.dict_params['frequency_reference']
         no_ini_conditions = False
         self.output_factor = 1.
         if 'no_initial_cond_mssm' in self.dict_params.keys():
@@ -141,7 +170,7 @@ class Fit_params_SD:
             for i in range(len(self.bo[0])):
                 bo_de.append((self.bo[0][i], self.bo[1][i]))
             # Running DE
-            results_de = self.run_DE(bo_de)  # differential_evolution(fun_aux_de, bounds=bo_de, disp=True)
+            results_de = self.run_DE(bo_de, freq_ref)  # differential_evolution(fun_aux_de, bounds=bo_de, disp=True)
             # Saving results
             parametersoln = results_de.x
             self.results_optimization = results_de
@@ -171,8 +200,8 @@ class Fit_params_SD:
             read_file = open(aux_file, 'rb')
             dict_to_read = pickle.load(read_file)
 
-            self.fitted_parameters = dict_to_read['params']
             self.results_optimization = dict_to_read['res_optimization']
+            self.fitted_parameters = dict_to_read['res_optimization']['population']  # dict_to_read['params']
             self.bo = dict_to_read['bounds']
             ref_vector = dict_to_read['reference']
             output_factor = dict_to_read['scaling_factor_ref']
@@ -182,8 +211,8 @@ class Fit_params_SD:
 
         return self.fitted_parameters
 
-    def evaluate_model(self):
-        eval_model = self.model_SD.run_model(self.time_vector, *self.fitted_parameters, **self.kwargs_model)
+    def evaluate_model(self, params):
+        eval_model = self.model_SD.run_model(self.time_vector, *params, **self.kwargs_model)
 
     def assert_dict_params(self, dict_params):
         assert isinstance(dict_params, dict), "dict_params must be a Dictionary"
@@ -213,3 +242,8 @@ class Fit_params_SD:
         assert os.path.isdir(dict_params['path']), "Folder %s does not exist" % dict_params['path']
         assert isinstance(dict_params['description_file'], str), "dict_params['description_file'] must be a string"
         assert isinstance(dict_params['output_factor'], float), "dict_params['output_factor'] must be a float"
+        assert 'frequency_reference' in dict_params.keys(), "dict_params must have 'frequency_reference' as key"
+        assert isinstance(dict_params['frequency_reference'], bool), "dict_params['frequency_reference'] must be bool"
+        if dict_params['frequency_reference']:
+            assert 'ref_freq_vector' in dict_params.keys(), "dict_params must have 'ref_freq_vector' as key"
+            assert isinstance(dict_params['ref_freq_vector'], list), "'ref_freq_vector' must be a list"

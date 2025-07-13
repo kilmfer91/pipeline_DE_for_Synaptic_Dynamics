@@ -411,7 +411,7 @@ class SynDynModel:
             self.compute_output_spike_event(spike_range, output_model)
 
         if return_only_spike_event:
-            return np.array(self.output_spike_events)
+            return np.array(self.output_spike_events).T
         if model_neuron is not None:
             return model_neuron.membrane_potential
         else:

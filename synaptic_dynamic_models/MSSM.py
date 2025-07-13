@@ -144,7 +144,7 @@ class MSSM_model(SynDynModel):
             # Probability of release
             self.P[:, 0] = I_t * self.P[:, 0]
             # Vesicle release
-            dV_aux = (-self.K_V * (self.P0 * I_t)) * self.dt
+            dV_aux = (-self.K_V * (self.P0 * self.V0 * I_t)) * self.dt
             self.V[:, t] = dV_aux + self.V0
             # Neurotransmitter buffering
             dN_aux = k_NtV * -dV_aux * I_t * self.dt
@@ -157,12 +157,15 @@ class MSSM_model(SynDynModel):
             d_C_aux = (((self.C0 - self.C[:, t - 1]) / self.tau_c) + (alpha * I_t)) * self.dt
             self.C[:, t] = d_C_aux + self.C[:, t - 1]
             # Probability of release
-            self.P[:, t] = I_t * (1 - np.exp(-self.C[:, t - 1] * self.V[:, t - 1]))
+            self.P[:, t] = I_t * (1 - np.exp(-self.C[:, t] * self.V[:, t - 1]))
+            # self.P[:, t] = I_t * np.random.exponential(np.ones(self.n_syn))
+
             # Vesicle release
-            dV_aux = (((self.V0 - self.V[:, t - 1]) / self.tau_v) - self.K_V * (self.P[:, t] * I_t)) * self.dt
-            self.V[:, t] = np.clip(dV_aux + self.V[:, t - 1], 0, None)
+            factor_P_V = self.P[:, t] * self.V[:, t - 1] * I_t
+            dV_aux = (((self.V0 - self.V[:, t - 1]) / self.tau_v) - self.K_V * factor_P_V) * self.dt
+            self.V[:, t] = dV_aux + self.V[:, t - 1]
             # Neurotransmitter buffering
-            dN_aux = (k_NtV * -dV_aux * I_t + ((self.Nt0 - self.k_Nt * self.N[:, t - 1]) / self.tau_Nt)) * self.dt
+            dN_aux = (k_NtV * factor_P_V + ((self.Nt0 - self.k_Nt * self.N[:, t - 1]) / self.tau_Nt)) * self.dt
             self.N[:, t] = dN_aux + self.N[:, t - 1]
             # Excitatory Postsynaptic contribution
             d_EPSP_aux = (((self.E_0 - self.EPSP[:, t - 1]) + self.k_EPSP * self.N[:, t]) * (self.dt / self.tau_EPSP))
