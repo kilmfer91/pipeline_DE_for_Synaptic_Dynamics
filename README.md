@@ -1,7 +1,7 @@
 ## Description
 In this repository, a pipeline is presented to search for 
 parameters of Synaptic Dynamics (SD) models, with the aim of simulating 
-experimental _in vitro_ recordings of real synapses. The pipeline have 
+experimental _in vitro_ recordings of real synapses (Associated paper can be found [here](https://www.esann.org/sites/default/files/proceedings/2025/ES2025-111.pdf)). The pipeline have 
 different components: an input signal, a reference signal, a SD model 
 and an implementation of Differential Evolution (DE).
 A diagram of the pipeline is depicted here:
